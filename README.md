@@ -9,6 +9,12 @@ Implementation of 'Self-adversarial Variational Autoencoder with Gaussian Anomal
   <p>Simplified Self-AVAE architecture.</p>
 </div> -->
 
+## Graph in TensorBoard
+<div align="center">
+  <img src="./figures/graph.png" width="800">  
+  <p>Graph of Self-AVAE.</p>
+</div>
+
 ## Environment
 * Python 3.7.4  
 * Tensorflow 1.14.0  
