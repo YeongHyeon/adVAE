@@ -2,11 +2,12 @@ import tensorflow as tf
 
 class CVAE(object):
 
-    def __init__(self, height, width, channel, z_dim, leaning_rate=1e-3):
+    def __init__(self, height, width, channel, z_dim, mx, mz, leaning_rate=1e-3):
 
         print("\nInitializing Neural Network...")
         self.height, self.width, self.channel = height, width, channel
         self.k_size, self.z_dim = 3, z_dim
+        self.mx, self.mz, = mx, mz
         self.leaning_rate = leaning_rate
 
         self.x = tf.compat.v1.placeholder(tf.float32, [None, self.height, self.width, self.channel])
@@ -17,33 +18,75 @@ class CVAE(object):
         self.fc_shapes, self.conv_shapes = [], []
         self.features_r, self.features_f = [], []
 
-        self.z_pack, self.z_T_pack, self.z_Tr_pack, self.x_r, self.x_Tr =\
+        self.z_pack, self.z_r_pack, self.z_T_pack, self.z_Tr_pack, self.x_r, self.x_Tr =\
             self.build_model(input=self.x, ksize=self.k_size)
 
-        """Loss"""
-        # self.restore_error = -tf.reduce_sum(self.x * tf.math.log(self.x_hat + 1e-12) + (1 - self.x) * tf.math.log(1 - self.x_hat + 1e-12), axis=(1, 2, 3))
-        # self.kl_divergence = 0.5 * tf.reduce_sum(tf.square(self.z_mu) + tf.square(self.z_sigma) - tf.math.log(tf.square(self.z_sigma) + 1e-12) - 1, axis=(1))
-        #
-        # self.mean_restore = tf.reduce_mean(self.restore_error)
-        # self.mean_kld = tf.reduce_mean(self.kl_divergence)
-        # self.ELBO = tf.reduce_mean(self.restore_error + self.kl_divergence) # Evidence LowerBOund
-        # self.loss = self.ELBO
-        #
-        # self.mean_loss_enc = tf.compat.v1.reduce_mean(self.loss_enc)
-        # self.mean_loss_con = tf.compat.v1.reduce_mean(self.loss_con)
-        # self.mean_loss_adv = tf.compat.v1.reduce_mean(self.loss_adv)
-        #
-        # self.loss = tf.compat.v1.reduce_mean((self.w_enc * self.loss_enc) + (self.w_con * self.loss_con) + (self.w_adv * self.loss_adv))
-        #
-        # #default: beta1=0.9, beta2=0.999
-        # self.optimizer = tf.compat.v1.train.AdamOptimizer( \
-        #     self.leaning_rate, beta1=0.5, beta2=0.999).minimize(self.loss)
-        #
-        # tf.compat.v1.summary.scalar('loss_enc', self.mean_loss_enc)
-        # tf.compat.v1.summary.scalar('loss_con', self.mean_loss_con)
-        # tf.compat.v1.summary.scalar('loss_adv', self.mean_loss_adv)
-        # tf.compat.v1.summary.scalar('loss_tot', self.loss)
-        # self.summaries = tf.compat.v1.summary.merge_all()
+        """Loss of Transformer"""
+        # self.T_term1 = tf.math.log(((self.z_T_pack[2] + 1e-12) / (self.z_pack[2] + 1e-12)) + 1e-12)
+        # self.T_term2 = (tf.square(self.z_pack[2]) + tf.square(self.z_pack[1] - self.z_T_pack[1]) + 1e-12) / (2 * tf.square(self.z_T_pack[2]) + 1e-12)
+        # self.T_term3 = - 0.5
+        # self.loss_T = self.T_term1 + self.T_term2 + self.T_term3
+        self.T_term1 = self.z_T_pack[2] * self.z_pack[2]
+        self.T_term2 = tf.square(self.z_T_pack[1] - self.z_T_pack[2])
+        self.T_term3 = tf.math.log(((self.z_T_pack[2] + 1e-12) / (self.z_pack[2] + 1e-12)) + 1e-12)
+        self.loss_T = 0.5 * (self.T_term1 + self.T_term2 + self.T_term3 - self.z_dim)
+
+        """Loss of Generator"""
+        self.mse_r = self.mean_square_error(x1=self.x, x2=self.x_r)
+        self.mse_Tr = self.mean_square_error(x1=self.x_r, x2=self.x_Tr)
+        self.kld_r = self.kl_divergence(mu=self.z_r_pack[1], sigma=self.z_r_pack[2])
+        self.kld_Tr = self.kl_divergence(mu=self.z_Tr_pack[1], sigma=self.z_Tr_pack[2])
+        self.loss_G_z = self.mse_r + self.kld_r
+        self.loss_G_zT = self.max_with_positive_margin(margin=self.mx, loss=self.mse_Tr) + \
+            self.max_with_positive_margin(margin=self.mz, loss=self.kld_Tr)
+        self.loss_G = self.loss_G_z + self.loss_G_zT
+
+        """Loss of Encoder"""
+        self.kld = self.kl_divergence(mu=self.z_pack[1], sigma=self.z_pack[2])
+        self.loss_E = self.kld + \
+            self.max_with_positive_margin(margin=self.mz, loss=self.kld_r) + \
+            self.max_with_positive_margin(margin=self.mz, loss=self.kld_Tr)
+
+        self.loss_T_mean = tf.compat.v1.reduce_mean(self.loss_T)
+        self.loss_G_mean = tf.compat.v1.reduce_mean(self.loss_G)
+        self.loss_E_mean = tf.compat.v1.reduce_mean(self.loss_E)
+
+        self.loss1 = tf.compat.v1.reduce_mean(self.loss_T + self.loss_G)
+        self.loss2 = self.loss_E_mean
+        self.loss_tot = self.loss1 + self.loss2
+
+        self.optimizer1 = tf.compat.v1.train.AdamOptimizer( \
+            self.leaning_rate, beta1=0.5, beta2=0.999).minimize(self.loss1)
+        self.optimizer2 = tf.compat.v1.train.AdamOptimizer( \
+            self.leaning_rate, beta1=0.5, beta2=0.999).minimize(self.loss2)
+
+        tf.compat.v1.summary.scalar('loss_T', self.loss_T_mean)
+        tf.compat.v1.summary.scalar('loss_G', self.loss_G_mean)
+        tf.compat.v1.summary.scalar('loss_E(loss_2)', self.loss_E_mean)
+        tf.compat.v1.summary.scalar('loss_1(T&G)', self.loss1)
+        tf.compat.v1.summary.scalar('loss_tot', self.loss_tot)
+        self.summaries = tf.compat.v1.summary.merge_all()
+
+    def mean_square_error(self, x1, x2):
+
+        data_dim = len(x1.shape)
+        if(data_dim == 4):
+            return tf.compat.v1.reduce_sum(tf.square(x1 - x2), axis=(1, 2, 3))
+        elif(data_dim == 3):
+            return tf.compat.v1.reduce_sum(tf.square(x1 - x2), axis=(1, 2))
+        elif(data_dim == 2):
+            return tf.compat.v1.reduce_sum(tf.square(x1 - x2), axis=(1))
+        else:
+            return tf.compat.v1.reduce_sum(tf.square(x1 - x2))
+
+    def kl_divergence(self, mu, sigma):
+
+        return 0.5 * tf.compat.v1.reduce_sum(tf.square(mu) + tf.square(sigma) - tf.math.log(tf.square(sigma) + 1e-12) - 1, axis=(1))
+
+    def max_with_positive_margin(self, margin, loss):
+
+
+        return tf.compat.v1.math.maximum(x=tf.compat.v1.zeros_like(loss), y=(tf.compat.v1.ones_like(loss) * margin) - loss)
 
     def build_model(self, input, ksize=3):
 
@@ -57,10 +100,11 @@ class CVAE(object):
         z_Tr, z_mu_Tr, z_sigma_Tr = self.encoder(input=x_Tr, ksize=ksize)
 
         z_pack = [z, z_mu, z_sigma]
+        z_r_pack = [z_r, z_mu_r, z_sigma_r]
         z_T_pack = [z_r, z_mu_r, z_sigma_r]
         z_Tr_pack = [z_Tr, z_mu_Tr, z_sigma_Tr]
 
-        return z_pack, z_T_pack, z_Tr_pack, x_r, x_Tr
+        return z_pack, z_r_pack, z_T_pack, z_Tr_pack, x_r, x_Tr
 
     def encoder(self, input, ksize=3):
 

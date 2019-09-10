@@ -87,7 +87,7 @@ def training(sess, saver, neuralnet, dataset, epochs, batch_size, normalize=True
     for epoch in range(epochs):
 
         x_tr, y_tr, _ = dataset.next_train(batch_size=test_size, fix=True) # Initial batch
-        x_restore = sess.run(neuralnet.x_hat, \
+        x_restore = sess.run(neuralnet.x_r, \
             feed_dict={neuralnet.x:x_tr, neuralnet.batch_size:x_tr.shape[0]})
 
         save_img(contents=[x_tr, x_restore, (x_tr-x_restore)**2], \
@@ -97,18 +97,25 @@ def training(sess, saver, neuralnet, dataset, epochs, batch_size, normalize=True
         while(True):
             x_tr, y_tr, terminator = dataset.next_train(batch_size) # y_tr does not used in this prj.
 
-            _, summaries = sess.run([neuralnet.optimizer, neuralnet.summaries], \
+            loss_T, loss_G, loss_E, loss_tot = sess.run([neuralnet.loss_T_mean, neuralnet.loss_G_mean, neuralnet.loss_E_mean, neuralnet.loss_tot], \
+                feed_dict={neuralnet.x:x_tr, neuralnet.batch_size:x_tr.shape[0]})
+            print("Epoch [%d / %d] (%d iteration) Loss  T:%.3f, G:%.3f, E:%.3f, Tot:%.3f" \
+                %(epoch, epochs, iteration, loss_T, loss_G, loss_E, loss_tot))
+
+            _ = sess.run(neuralnet.optimizer1, \
+                feed_dict={neuralnet.x:x_tr, neuralnet.batch_size:x_tr.shape[0]})
+            _ = sess.run(neuralnet.optimizer2, \
+                feed_dict={neuralnet.x:x_tr, neuralnet.batch_size:x_tr.shape[0]})
+            summaries = sess.run(neuralnet.summaries, \
                 feed_dict={neuralnet.x:x_tr, neuralnet.batch_size:x_tr.shape[0]}, \
                 options=run_options, run_metadata=run_metadata)
-            loss_enc, loss_con, loss_adv, loss_tot = sess.run([neuralnet.mean_loss_enc, neuralnet.mean_loss_con, neuralnet.mean_loss_adv, neuralnet.loss], \
-                feed_dict={neuralnet.x:x_tr, neuralnet.batch_size:x_tr.shape[0]})
+
             summary_writer.add_summary(summaries, iteration)
 
             iteration += 1
             if(terminator): break
 
-        print("Epoch [%d / %d] (%d iteration) Loss  Enc:%.3f, Con:%.3f, Adv:%.3f, Tot:%.3f" \
-            %(epoch, epochs, iteration, loss_enc, loss_con, loss_adv, loss_tot))
+
         saver.save(sess, PACK_PATH+"/Checkpoint/model_checker")
         summary_writer.add_run_metadata(run_metadata, 'epoch-%d' % epoch)
 
@@ -128,7 +135,7 @@ def test(sess, saver, neuralnet, dataset, batch_size):
     while(True):
         x_te, y_te, terminator = dataset.next_test(1) # y_te does not used in this prj.
 
-        x_restore, score_anomaly = sess.run([neuralnet.x_hat, neuralnet.loss_enc], \
+        x_restore, score_anomaly = sess.run([neuralnet.x_r, neuralnet.mse_r], \
             feed_dict={neuralnet.x:x_te, neuralnet.batch_size:x_te.shape[0]})
         if(y_te[0] == 1):
             loss_list.append(score_anomaly[0])
@@ -149,7 +156,7 @@ def test(sess, saver, neuralnet, dataset, batch_size):
     while(True):
         x_te, y_te, terminator = dataset.next_test(1) # y_te does not used in this prj.
 
-        x_restore, score_anomaly = sess.run([neuralnet.x_hat, neuralnet.loss_enc], \
+        x_restore, score_anomaly = sess.run([neuralnet.x_r, neuralnet.mse_r], \
             feed_dict={neuralnet.x:x_te, neuralnet.batch_size:x_te.shape[0]})
 
         loss4box[y_te[0]].append(score_anomaly)
