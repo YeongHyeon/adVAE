@@ -87,11 +87,11 @@ def training(sess, saver, neuralnet, dataset, epochs, batch_size, normalize=True
     for epoch in range(epochs):
 
         x_tr, y_tr, _ = dataset.next_train(batch_size=test_size, fix=True) # Initial batch
-        x_restore = sess.run(neuralnet.x_r, \
+        x_restore, x_Trestore = sess.run([neuralnet.x_r, neuralnet.x_Tr], \
             feed_dict={neuralnet.x:x_tr, neuralnet.batch_size:x_tr.shape[0]})
 
-        save_img(contents=[x_tr, x_restore, (x_tr-x_restore)**2], \
-            names=["Input\n(x)", "Restoration\n(x to x-hat)", "Difference"], \
+        save_img(contents=[x_tr, x_restore, (x_tr-x_restore)**2, x_Trestore], \
+            names=["x", "x_r", "(x-x_r)^2", "x_Tr"], \
             savename=os.path.join("results", "tr_resotring", "%08d.png" %(epoch)))
 
         while(True):

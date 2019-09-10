@@ -18,23 +18,20 @@ class CVAE(object):
         self.fc_shapes, self.conv_shapes = [], []
         self.features_r, self.features_f = [], []
 
-        self.z_pack, self.z_r_pack, self.z_T_pack, self.z_Tr_pack, self.x_r, self.x_Tr =\
+        self.z_pack, self.z_T_pack, self.x_r, self.x_Tr, self.z_r_pack, self.z_Tr_pack = \
             self.build_model(input=self.x, ksize=self.k_size)
 
         """Loss of Transformer"""
-        # self.T_term1 = tf.math.log(((self.z_T_pack[2] + 1e-12) / (self.z_pack[2] + 1e-12)) + 1e-12)
-        # self.T_term2 = (tf.square(self.z_pack[2]) + tf.square(self.z_pack[1] - self.z_T_pack[1]) + 1e-12) / (2 * tf.square(self.z_T_pack[2]) + 1e-12)
-        # self.T_term3 = - 0.5
-        # self.loss_T = self.T_term1 + self.T_term2 + self.T_term3
-        self.T_term1 = self.z_T_pack[2] * self.z_pack[2]
-        self.T_term2 = tf.square(self.z_T_pack[1] - self.z_T_pack[2])
-        self.T_term3 = tf.math.log(((self.z_T_pack[2] + 1e-12) / (self.z_pack[2] + 1e-12)) + 1e-12)
-        self.loss_T = 0.5 * (self.T_term1 + self.T_term2 + self.T_term3 - self.z_dim)
+        # z_pack = [0:z, 1:z_mu, 2:z_sigma]
+        self.T_term1 = tf.math.log(((self.z_T_pack[2] + 1e-12) / (self.z_pack[2] + 1e-12)) + 1e-12)
+        self.T_term2 = (tf.square(self.z_pack[2]) + tf.square(self.z_pack[1] - self.z_T_pack[1]) + 1e-12) / (2 * tf.square(self.z_T_pack[2]) + 1e-12)
+        self.T_term3 = - 0.5
+        self.loss_T = tf.compat.v1.reduce_sum(self.T_term1 + self.T_term2 + self.T_term3, axis=(1))
 
         """Loss of Generator"""
         self.mse_r = self.mean_square_error(x1=self.x, x2=self.x_r)
-        self.mse_Tr = self.mean_square_error(x1=self.x_r, x2=self.x_Tr)
         self.kld_r = self.kl_divergence(mu=self.z_r_pack[1], sigma=self.z_r_pack[2])
+        self.mse_Tr = self.mean_square_error(x1=self.x_r, x2=self.x_Tr)
         self.kld_Tr = self.kl_divergence(mu=self.z_Tr_pack[1], sigma=self.z_Tr_pack[2])
         self.loss_G_z = self.mse_r + self.kld_r
         self.loss_G_zT = self.max_with_positive_margin(margin=self.mx, loss=self.mse_Tr) + \
@@ -43,7 +40,7 @@ class CVAE(object):
 
         """Loss of Encoder"""
         self.kld = self.kl_divergence(mu=self.z_pack[1], sigma=self.z_pack[2])
-        self.loss_E = self.kld + \
+        self.loss_E = self.kld + self.mse_r + \
             self.max_with_positive_margin(margin=self.mz, loss=self.kld_r) + \
             self.max_with_positive_margin(margin=self.mz, loss=self.kld_Tr)
 
@@ -55,15 +52,25 @@ class CVAE(object):
         self.loss2 = self.loss_E_mean
         self.loss_tot = self.loss1 + self.loss2
 
+        self.vars1, self.vars2 = [], []
+        for widx, wname in enumerate(self.w_names):
+            if("enc_" in wname):
+                self.vars2.append(self.weights[widx])
+                self.vars2.append(self.biasis[widx])
+            elif(("gen_" in wname) or ("tra_" in wname)):
+                self.vars1.append(self.weights[widx])
+                self.vars1.append(self.biasis[widx])
+            else: pass
+
+        #default: beta1=0.9, beta2=0.999
         self.optimizer1 = tf.compat.v1.train.AdamOptimizer( \
-            self.leaning_rate, beta1=0.5, beta2=0.999).minimize(self.loss1)
+            self.leaning_rate, beta1=0.9, beta2=0.999).minimize(self.loss1, var_list=self.vars1, name='Adam_T_G')
         self.optimizer2 = tf.compat.v1.train.AdamOptimizer( \
-            self.leaning_rate, beta1=0.5, beta2=0.999).minimize(self.loss2)
+            self.leaning_rate, beta1=0.9, beta2=0.999).minimize(self.loss2, var_list=self.vars2, name='Adam_E')
 
         tf.compat.v1.summary.scalar('loss_T', self.loss_T_mean)
         tf.compat.v1.summary.scalar('loss_G', self.loss_G_mean)
-        tf.compat.v1.summary.scalar('loss_E(loss_2)', self.loss_E_mean)
-        tf.compat.v1.summary.scalar('loss_1(T&G)', self.loss1)
+        tf.compat.v1.summary.scalar('loss_E', self.loss_E_mean)
         tf.compat.v1.summary.scalar('loss_tot', self.loss_tot)
         self.summaries = tf.compat.v1.summary.merge_all()
 
@@ -85,61 +92,82 @@ class CVAE(object):
 
     def max_with_positive_margin(self, margin, loss):
 
-
-        return tf.compat.v1.math.maximum(x=tf.compat.v1.zeros_like(loss), y=(tf.compat.v1.ones_like(loss) * margin) - loss)
+        return tf.compat.v1.math.maximum(x=tf.compat.v1.zeros_like(loss), y=(-loss + margin))
 
     def build_model(self, input, ksize=3):
 
-        # with tf.name_scope('encoder') as scope_enc:
-        z, z_mu, z_sigma = self.encoder(input=input, ksize=ksize)
-        x_r = self.generator(input=z, ksize=ksize)
-        z_r, z_mu_r, z_sigma_r = self.encoder(input=x_r, ksize=ksize)
+        with tf.variable_scope('encoder') as scope_enc:
+            z, z_mu, z_sigma = self.encoder(input=input, ksize=ksize)
+            z_pack = [z, z_mu, z_sigma]
 
-        z_T = self.transformer(input=z)
-        x_Tr = self.generator(input=z_T, ksize=ksize)
-        z_Tr, z_mu_Tr, z_sigma_Tr = self.encoder(input=x_Tr, ksize=ksize)
+        with tf.variable_scope('transformer') as scope_tra:
+            z_T, z_mu_T, z_sigma_T = self.transformer(input=z)
+            z_T_pack = [z_T, z_mu_T, z_sigma_T]
 
-        z_pack = [z, z_mu, z_sigma]
-        z_r_pack = [z_r, z_mu_r, z_sigma_r]
-        z_T_pack = [z_r, z_mu_r, z_sigma_r]
-        z_Tr_pack = [z_Tr, z_mu_Tr, z_sigma_Tr]
+        with tf.variable_scope('generator') as scope_gen:
+            x_r = self.generator(input=z, ksize=ksize)
+            x_Tr = self.generator(input=z_T, ksize=ksize)
 
-        return z_pack, z_r_pack, z_T_pack, z_Tr_pack, x_r, x_Tr
+        with tf.variable_scope(scope_enc, reuse=True):
+            z_r, z_mu_r, z_sigma_r = self.encoder(input=x_r, ksize=ksize)
+            z_r_pack = [z_r, z_mu_r, z_sigma_r]
+            z_Tr, z_mu_Tr, z_sigma_Tr = self.encoder(input=x_Tr, ksize=ksize)
+            z_Tr_pack = [z_Tr, z_mu_Tr, z_sigma_Tr]
+
+        return z_pack, z_T_pack, x_r, x_Tr, z_r_pack, z_Tr_pack
 
     def encoder(self, input, ksize=3):
 
         print("\nEncode-1")
         conv1_1 = self.conv2d(input=input, stride=1, padding='SAME', \
-            filter_size=[ksize, ksize, 1, 16], activation="elu", name="endconv1_1")
+            filter_size=[ksize, ksize, 1, 16], activation="sigmoid", name="enc_conv1_1")
         conv1_2 = self.conv2d(input=conv1_1, stride=1, padding='SAME', \
-            filter_size=[ksize, ksize, 16, 16], activation="elu", name="endconv1_2")
-        maxp1 = self.maxpool(input=conv1_2, ksize=2, strides=2, padding='SAME', name="endmax_pool1")
+            filter_size=[ksize, ksize, 16, 16], activation="sigmoid", name="enc_conv1_2")
+        maxp1 = self.maxpool(input=conv1_2, ksize=2, strides=2, padding='SAME', name="enc_max_pool1")
         self.conv_shapes.append(conv1_2.shape)
 
         print("Encode-2")
         conv2_1 = self.conv2d(input=maxp1, stride=1, padding='SAME', \
-            filter_size=[ksize, ksize, 16, 32], activation="elu", name="endconv2_1")
+            filter_size=[ksize, ksize, 16, 32], activation="sigmoid", name="enc_conv2_1")
         conv2_2 = self.conv2d(input=conv2_1, stride=1, padding='SAME', \
-            filter_size=[ksize, ksize, 32, 32], activation="elu", name="endconv2_2")
-        maxp2 = self.maxpool(input=conv2_2, ksize=2, strides=2, padding='SAME', name="endmax_pool2")
+            filter_size=[ksize, ksize, 32, 32], activation="sigmoid", name="enc_conv2_2")
+        maxp2 = self.maxpool(input=conv2_2, ksize=2, strides=2, padding='SAME', name="enc_max_pool2")
         self.conv_shapes.append(conv2_2.shape)
 
         print("Encode-3")
         conv3_1 = self.conv2d(input=maxp2, stride=1, padding='SAME', \
-            filter_size=[ksize, ksize, 32, 64], activation="elu", name="endconv3_1")
+            filter_size=[ksize, ksize, 32, 64], activation="sigmoid", name="enc_conv3_1")
         conv3_2 = self.conv2d(input=conv3_1, stride=1, padding='SAME', \
-            filter_size=[ksize, ksize, 64, 64], activation="elu", name="endconv3_2")
+            filter_size=[ksize, ksize, 64, 64], activation="sigmoid", name="enc_conv3_2")
         self.conv_shapes.append(conv3_2.shape)
 
         print("Encode-Dense")
         self.fc_shapes.append(conv3_2.shape)
         [n, h, w, c] = self.fc_shapes[0]
-        fulcon_in = tf.compat.v1.reshape(conv3_2, shape=[self.batch_size, h*w*c], name="endfulcon_in")
+        fulcon_in = tf.compat.v1.reshape(conv3_2, shape=[self.batch_size, h*w*c], name="enc_fulcon_in")
         fulcon1 = self.fully_connected(input=fulcon_in, num_inputs=int(h*w*c), \
-            num_outputs=512, activation="elu", name="endfullcon1")
+            num_outputs=512, activation="sigmoid", name="enc_fullcon1")
 
         z_params = self.fully_connected(input=fulcon1, num_inputs=int(fulcon1.shape[1]), \
-            num_outputs=self.z_dim*2, activation="None", name="endz_sigma")
+            num_outputs=self.z_dim*2, activation="None", name="enc_z")
+        # z_params = tf.compat.v1.clip_by_value(z_params, -3+(1e-12), 3-(1e-12))
+        z_mu = z_params[:, :self.z_dim]
+        z_sigma = z_params[:, self.z_dim:]
+
+        z = self.sample_z(mu=z_mu, sigma=z_sigma) # reparameterization trick
+
+        return z, z_mu, z_sigma
+
+    def transformer(self, input):
+
+        print("\nTransformer-Dense")
+        [n, m] = input.shape
+        fulcon1 = self.fully_connected(input=input, num_inputs=m, \
+            num_outputs=512, activation="sigmoid", name="tra_fullcon1")
+
+        z_params = self.fully_connected(input=fulcon1, num_inputs=512, \
+            num_outputs=self.z_dim*2, activation="None", name="tra_z")
+        # z_params = tf.compat.v1.clip_by_value(z_params, -3+(1e-12), 3-(1e-12))
         z_mu = z_params[:, :self.z_dim]
         z_sigma = z_params[:, self.z_dim:]
 
@@ -152,48 +180,37 @@ class CVAE(object):
         print("\nGenerate-Dense")
         [n, h, w, c] = self.fc_shapes[0]
         fulcon2 = self.fully_connected(input=input, num_inputs=int(self.z_dim), \
-            num_outputs=512, activation="elu", name="genfullcon2")
+            num_outputs=512, activation="sigmoid", name="gen_fullcon2")
         fulcon3 = self.fully_connected(input=fulcon2, num_inputs=int(fulcon2.shape[1]), \
-            num_outputs=int(h*w*c), activation="elu", name="genfullcon3")
-        fulcon_out = tf.compat.v1.reshape(fulcon3, shape=[self.batch_size, h, w, c], name="genfulcon_out")
+            num_outputs=int(h*w*c), activation="sigmoid", name="gen_fullcon3")
+        fulcon_out = tf.compat.v1.reshape(fulcon3, shape=[self.batch_size, h, w, c], name="gen_fulcon_out")
 
         print("Generate-1")
         convt1_1 = self.conv2d(input=fulcon_out, stride=1, padding='SAME', \
-            filter_size=[ksize, ksize, 64, 64], activation="elu", name="genconv1_1")
+            filter_size=[ksize, ksize, 64, 64], activation="sigmoid", name="gen_conv1_1")
         convt1_2 = self.conv2d(input=convt1_1, stride=1, padding='SAME', \
-            filter_size=[ksize, ksize, 64, 64], activation="elu", name="genconv1_2")
+            filter_size=[ksize, ksize, 64, 64], activation="sigmoid", name="gen_conv1_2")
 
         print("Generate-2")
         [n, h, w, c] = self.conv_shapes[-2]
         convt2_1 = self.conv2d_transpose(input=convt1_2, stride=2, padding='SAME', \
             output_shape=[self.batch_size, h, w, c], filter_size=[ksize, ksize, 32, 64], \
-            dilations=[1, 1, 1, 1], activation="elu", name="genconv2_1")
+            dilations=[1, 1, 1, 1], activation="sigmoid", name="gen_conv2_1")
         convt2_2 = self.conv2d(input=convt2_1, stride=1, padding='SAME', \
-            filter_size=[ksize, ksize, 32, 32], activation="elu", name="genconv2_2")
+            filter_size=[ksize, ksize, 32, 32], activation="sigmoid", name="gen_conv2_2")
 
         print("Generate-3")
         [n, h, w, c] = self.conv_shapes[-3]
         convt3_1 = self.conv2d_transpose(input=convt2_2, stride=2, padding='SAME', \
             output_shape=[self.batch_size, h, w, c], filter_size=[ksize, ksize, 16, 32], \
-            dilations=[1, 1, 1, 1], activation="elu", name="genconv3_1")
+            dilations=[1, 1, 1, 1], activation="sigmoid", name="gen_conv3_1")
         convt3_2 = self.conv2d(input=convt3_1, stride=1, padding='SAME', \
-            filter_size=[ksize, ksize, 16, 16], activation="elu", name="genconv3_2")
+            filter_size=[ksize, ksize, 16, 16], activation="sigmoid", name="gen_conv3_2")
         convt3_3 = self.conv2d(input=convt3_2, stride=1, padding='SAME', \
-            filter_size=[ksize, ksize, 16, 1], activation="sigmoid", name="genconv3_3")
-        convt3_3 = tf.compat.v1.clip_by_value(convt3_3, 1e-12, 1-(1e-12))
+            filter_size=[ksize, ksize, 16, 1], activation="sigmoid", name="gen_conv3_3")
+        # convt3_3 = tf.compat.v1.clip_by_value(convt3_3, 1e-12, 1-(1e-12))
 
         return convt3_3
-
-    def transformer(self, input):
-
-        print("\nTransformer-Dense")
-        [n, m] = input.shape
-        fulcon1 = self.fully_connected(input=input, num_inputs=m, \
-            num_outputs=512, activation="elu", name="trafullcon1")
-        fulcon2 = self.fully_connected(input=fulcon1, num_inputs=512, \
-            num_outputs=m, activation="None", name="trafullcon2")
-
-        return fulcon2
 
     def sample_z(self, mu, sigma):
 
