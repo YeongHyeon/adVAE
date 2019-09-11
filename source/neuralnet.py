@@ -27,10 +27,8 @@ class Self_AVAE(object):
 
         """Loss of Transformer
         z_pack = [0:z, 1:z_mu, 2:z_sigma]"""
-        self.T_term1_1 = tf.math.log(self.z_T_pack[2] + 1e-12)
-        self.T_term1_2 = tf.math.log(self.z_pack[2] + 1e-12)
-        self.T_term1 = (self.T_term1_1 - self.T_term1_2)
-        self.T_term2 = (tf.square(self.z_pack[2]) + tf.square(self.z_pack[1] - self.z_T_pack[1])) / (2 * tf.square(self.z_T_pack[2]))
+        self.T_term1 = tf.math.log(self.z_T_pack[2] + 1e-12) - tf.math.log(self.z_pack[2] + 1e-12)
+        self.T_term2 = (tf.square(self.z_pack[2]) + tf.square(self.z_T_pack[1] - self.z_pack[1])) / (2 * tf.square(self.z_T_pack[2]))
         self.T_term3 = - 0.5
         self.loss_T = tf.compat.v1.reduce_sum(self.T_term1 + self.T_term2 + self.T_term3, axis=(1))
 
@@ -301,7 +299,7 @@ class Self_AVAE(object):
             name='%s_conv' %(name),
         )
         out_bias = tf.math.add(out_conv, bias, name='%s_add' %(name))
-        out_bias = self.batch_normalization(input=out_bias)
+        # out_bias = self.batch_normalization(input=out_bias)
 
         print("Conv", input.shape, "->", out_bias.shape)
         return self.activation_fn(input=out_bias, activation=activation, name=name)
@@ -339,7 +337,7 @@ class Self_AVAE(object):
             name='%s_conv_tr' %(name),
         )
         out_bias = tf.math.add(out_conv, bias, name='%s_add' %(name))
-        out_bias = self.batch_normalization(input=out_bias)
+        # out_bias = self.batch_normalization(input=out_bias)
 
         print("Conv-Tr", input.shape, "->", out_bias.shape)
         return self.activation_fn(input=out_bias, activation=activation, name=name)
@@ -365,7 +363,7 @@ class Self_AVAE(object):
 
         out_mul = tf.compat.v1.matmul(input, weight, name='%s_mul' %(name))
         out_bias = tf.math.add(out_mul, bias, name='%s_add' %(name))
-        out_bias = self.batch_normalization(input=out_bias)
+        # out_bias = self.batch_normalization(input=out_bias)
 
         print("Full-Con", input.shape, "->", out_bias.shape)
         return self.activation_fn(input=out_bias, activation=activation, name=name)
