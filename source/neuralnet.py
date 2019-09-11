@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-class CVAE(object):
+class Self_AVAE(object):
 
     def __init__(self, height, width, channel, z_dim, mx, mz, leaning_rate=1e-3):
 
@@ -14,6 +14,8 @@ class CVAE(object):
         self.batch_size = tf.placeholder(tf.int32, shape=[])
         # self.lambda_T = tf.placeholder(tf.float32, shape=[])
         # self.lambda_G = tf.placeholder(tf.float32, shape=[])
+        self.lambda_T = 1e-10
+        self.lambda_G = 1e+10
 
         self.weights, self.biasis = [], []
         self.w_names, self.b_names = [], []
@@ -23,8 +25,8 @@ class CVAE(object):
         self.z_pack, self.z_T_pack, self.x_r, self.x_Tr, self.z_r_pack, self.z_Tr_pack = \
             self.build_model(input=self.x, ksize=self.k_size)
 
-        """Loss of Transformer"""
-        # z_pack = [0:z, 1:z_mu, 2:z_sigma]
+        """Loss of Transformer
+        z_pack = [0:z, 1:z_mu, 2:z_sigma]"""
         self.T_term1_1 = tf.math.log(self.z_T_pack[2] + 1e-12)
         self.T_term1_2 = tf.math.log(self.z_pack[2] + 1e-12)
         self.T_term1 = (self.T_term1_1 - self.T_term1_2)
@@ -52,8 +54,7 @@ class CVAE(object):
         self.loss_G_mean = tf.compat.v1.reduce_mean(self.loss_G)
         self.loss_E_mean = tf.compat.v1.reduce_mean(self.loss_E)
 
-        self.loss1 = tf.compat.v1.reduce_mean((1e-10)*self.loss_T + (1e+10)*self.loss_G)
-        # self.loss1 = tf.compat.v1.reduce_mean(self.lambda_T*self.loss_T + self.lambda_G*self.loss_G)
+        self.loss1 = tf.compat.v1.reduce_mean((self.lambda_T * self.loss_T) + (self.lambda_G * self.loss_G))
         self.loss2 = self.loss_E_mean
         self.loss_tot = self.loss1 + self.loss2
 
@@ -63,7 +64,6 @@ class CVAE(object):
                 self.vars2.append(self.weights[widx])
                 self.vars2.append(self.biasis[widx])
             elif(("gen_" in wname) or ("tra_" in wname)):
-            # elif("tra_" in wname):
                 self.vars1.append(self.weights[widx])
                 self.vars1.append(self.biasis[widx])
             else: pass
@@ -73,7 +73,8 @@ class CVAE(object):
         print("\nVariables (E)")
         for var in self.vars2: print(var)
 
-        #default: beta1=0.9, beta2=0.999
+        """Two optimizers for training T, G, and E
+        default: beta1=0.9, beta2=0.999"""
         self.optimizer1 = tf.compat.v1.train.AdamOptimizer( \
             self.leaning_rate, beta1=0.9, beta2=0.999).minimize(self.loss1, var_list=self.vars1, name='Adam_T_G')
         self.optimizer2 = tf.compat.v1.train.AdamOptimizer( \
@@ -300,7 +301,7 @@ class CVAE(object):
             name='%s_conv' %(name),
         )
         out_bias = tf.math.add(out_conv, bias, name='%s_add' %(name))
-        # out_bias = self.batch_normalization(input=out_bias)
+        out_bias = self.batch_normalization(input=out_bias)
 
         print("Conv", input.shape, "->", out_bias.shape)
         return self.activation_fn(input=out_bias, activation=activation, name=name)
@@ -338,7 +339,7 @@ class CVAE(object):
             name='%s_conv_tr' %(name),
         )
         out_bias = tf.math.add(out_conv, bias, name='%s_add' %(name))
-        # out_bias = self.batch_normalization(input=out_bias)
+        out_bias = self.batch_normalization(input=out_bias)
 
         print("Conv-Tr", input.shape, "->", out_bias.shape)
         return self.activation_fn(input=out_bias, activation=activation, name=name)
@@ -364,7 +365,7 @@ class CVAE(object):
 
         out_mul = tf.compat.v1.matmul(input, weight, name='%s_mul' %(name))
         out_bias = tf.math.add(out_mul, bias, name='%s_add' %(name))
-        # out_bias = self.batch_normalization(input=out_bias)
+        out_bias = self.batch_normalization(input=out_bias)
 
         print("Full-Con", input.shape, "->", out_bias.shape)
         return self.activation_fn(input=out_bias, activation=activation, name=name)

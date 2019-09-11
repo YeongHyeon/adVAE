@@ -3,11 +3,11 @@ Self-AVAE (Self-adversarial Variational Autoencoder)
 
 Implementation of 'Self-adversarial Variational Autoencoder with Gaussian Anomaly Prior Distribution for Anomaly Detection' (Self-AVAE) [<a href="https://github.com/YeongHyeon/CVAE-AnomalyDetection">Related repository</a>].
 
-<!-- ## Architecture
+## Architecture
 <div align="center">
   <img src="./figures/self-avae.png" width="500">  
   <p>Simplified Self-AVAE architecture.</p>
-</div> -->
+</div>
 
 ## Graph in TensorBoard
 <div align="center">
