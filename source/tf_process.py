@@ -36,15 +36,15 @@ def dat2canvas(data):
 
     return canvas
 
-def save_img(contents, names=["", "", ""], savename=""):
+def save_img(contents, names, ylen, xlen, savename=""):
 
-    num_cont = len(contents)
-    plt.figure(figsize=(5*num_cont+2, 5))
+    plt.figure(figsize=(2+(5*xlen), 5*ylen))
 
-    for i in range(num_cont):
-        plt.subplot(1,num_cont,i+1)
-        plt.title(names[i])
-        plt.imshow(dat2canvas(data=contents[i]))
+    for y in range(ylen):
+        for x in range(xlen):
+            plt.subplot(2,3,(y*3)+(x+1))
+            plt.title(names[(y*3)+x])
+            plt.imshow(dat2canvas(data=contents[(y*3)+x]))
 
     plt.tight_layout()
     plt.savefig(savename)
@@ -90,17 +90,15 @@ def training(sess, saver, neuralnet, dataset, epochs, batch_size, normalize=True
         x_restore, x_Trestore = sess.run([neuralnet.x_r, neuralnet.x_Tr], \
             feed_dict={neuralnet.x:x_tr, neuralnet.batch_size:x_tr.shape[0]})
 
-        save_img(contents=[x_tr, x_restore, (x_tr-x_restore)**2, x_Trestore], \
-            names=["x", "x_r", "(x-x_r)^2", "x_Tr"], \
+        save_img(contents=[x_tr, x_restore, (x_tr-x_restore)**2, \
+            x_restore, x_Trestore, (x_restore-x_Trestore)**2], \
+            names=["x", "x_r", "(x-x_r)^2", \
+            "x_r", "x_Tr", "(x_r-x_Tr)^2"], \
+            ylen=2, xlen=3, \
             savename=os.path.join("results", "tr_resotring", "%08d.png" %(epoch)))
 
         while(True):
             x_tr, y_tr, terminator = dataset.next_train(batch_size) # y_tr does not used in this prj.
-
-            loss_T, loss_G, loss_E, loss_tot = sess.run([neuralnet.loss_T_mean, neuralnet.loss_G_mean, neuralnet.loss_E_mean, neuralnet.loss_tot], \
-                feed_dict={neuralnet.x:x_tr, neuralnet.batch_size:x_tr.shape[0]})
-            print("Epoch [%d / %d] (%d iteration) Loss  T:%.3f, G:%.3f, E:%.3f, Tot:%.3f" \
-                %(epoch, epochs, iteration, loss_T, loss_G, loss_E, loss_tot))
 
             _ = sess.run(neuralnet.optimizer1, \
                 feed_dict={neuralnet.x:x_tr, neuralnet.batch_size:x_tr.shape[0]})
@@ -110,11 +108,16 @@ def training(sess, saver, neuralnet, dataset, epochs, batch_size, normalize=True
                 feed_dict={neuralnet.x:x_tr, neuralnet.batch_size:x_tr.shape[0]}, \
                 options=run_options, run_metadata=run_metadata)
 
+            loss_T, loss_G, loss_E, loss_tot = sess.run([neuralnet.loss_T_mean, neuralnet.loss_G_mean, neuralnet.loss_E_mean, neuralnet.loss_tot], \
+                feed_dict={neuralnet.x:x_tr, neuralnet.batch_size:x_tr.shape[0]})
+
             summary_writer.add_summary(summaries, iteration)
 
             iteration += 1
             if(terminator): break
 
+        print("Epoch [%d / %d] (%d iteration) Loss  T:%.3f, G:%.3f, E:%.3f, Tot:%.3f" \
+            %(epoch, epochs, iteration, loss_T, loss_G, loss_E, loss_tot))
 
         saver.save(sess, PACK_PATH+"/Checkpoint/model_checker")
         summary_writer.add_run_metadata(run_metadata, 'epoch-%d' % epoch)

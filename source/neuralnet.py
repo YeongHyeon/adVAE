@@ -12,6 +12,8 @@ class CVAE(object):
 
         self.x = tf.compat.v1.placeholder(tf.float32, [None, self.height, self.width, self.channel])
         self.batch_size = tf.placeholder(tf.int32, shape=[])
+        # self.lambda_T = tf.placeholder(tf.float32, shape=[])
+        # self.lambda_G = tf.placeholder(tf.float32, shape=[])
 
         self.weights, self.biasis = [], []
         self.w_names, self.b_names = [], []
@@ -23,8 +25,10 @@ class CVAE(object):
 
         """Loss of Transformer"""
         # z_pack = [0:z, 1:z_mu, 2:z_sigma]
-        self.T_term1 = tf.math.log(((self.z_T_pack[2] + 1e-12) / (self.z_pack[2] + 1e-12)) + 1e-12)
-        self.T_term2 = (tf.square(self.z_pack[2]) + tf.square(self.z_pack[1] - self.z_T_pack[1]) + 1e-12) / (2 * tf.square(self.z_T_pack[2]) + 1e-12)
+        self.T_term1_1 = tf.math.log(self.z_T_pack[2] + 1e-12)
+        self.T_term1_2 = tf.math.log(self.z_pack[2] + 1e-12)
+        self.T_term1 = (self.T_term1_1 - self.T_term1_2)
+        self.T_term2 = (tf.square(self.z_pack[2]) + tf.square(self.z_pack[1] - self.z_T_pack[1])) / (2 * tf.square(self.z_T_pack[2]))
         self.T_term3 = - 0.5
         self.loss_T = tf.compat.v1.reduce_sum(self.T_term1 + self.T_term2 + self.T_term3, axis=(1))
 
@@ -48,7 +52,8 @@ class CVAE(object):
         self.loss_G_mean = tf.compat.v1.reduce_mean(self.loss_G)
         self.loss_E_mean = tf.compat.v1.reduce_mean(self.loss_E)
 
-        self.loss1 = tf.compat.v1.reduce_mean(self.loss_T + self.loss_G)
+        self.loss1 = tf.compat.v1.reduce_mean((1e-10)*self.loss_T + (1e+10)*self.loss_G)
+        # self.loss1 = tf.compat.v1.reduce_mean(self.lambda_T*self.loss_T + self.lambda_G*self.loss_G)
         self.loss2 = self.loss_E_mean
         self.loss_tot = self.loss1 + self.loss2
 
@@ -58,9 +63,15 @@ class CVAE(object):
                 self.vars2.append(self.weights[widx])
                 self.vars2.append(self.biasis[widx])
             elif(("gen_" in wname) or ("tra_" in wname)):
+            # elif("tra_" in wname):
                 self.vars1.append(self.weights[widx])
                 self.vars1.append(self.biasis[widx])
             else: pass
+
+        print("\nVariables (T and G)")
+        for var in self.vars1: print(var)
+        print("\nVariables (E)")
+        for var in self.vars2: print(var)
 
         #default: beta1=0.9, beta2=0.999
         self.optimizer1 = tf.compat.v1.train.AdamOptimizer( \
@@ -118,42 +129,39 @@ class CVAE(object):
 
     def encoder(self, input, ksize=3):
 
-        print("\nEncode-1")
+        print("\nEncoder-1")
         conv1_1 = self.conv2d(input=input, stride=1, padding='SAME', \
-            filter_size=[ksize, ksize, 1, 16], activation="sigmoid", name="enc_conv1_1")
+            filter_size=[ksize, ksize, 1, 16], activation="elu", name="enc_conv1_1")
         conv1_2 = self.conv2d(input=conv1_1, stride=1, padding='SAME', \
-            filter_size=[ksize, ksize, 16, 16], activation="sigmoid", name="enc_conv1_2")
+            filter_size=[ksize, ksize, 16, 16], activation="elu", name="enc_conv1_2")
         maxp1 = self.maxpool(input=conv1_2, ksize=2, strides=2, padding='SAME', name="enc_max_pool1")
         self.conv_shapes.append(conv1_2.shape)
 
-        print("Encode-2")
+        print("Encoder-2")
         conv2_1 = self.conv2d(input=maxp1, stride=1, padding='SAME', \
-            filter_size=[ksize, ksize, 16, 32], activation="sigmoid", name="enc_conv2_1")
+            filter_size=[ksize, ksize, 16, 32], activation="elu", name="enc_conv2_1")
         conv2_2 = self.conv2d(input=conv2_1, stride=1, padding='SAME', \
-            filter_size=[ksize, ksize, 32, 32], activation="sigmoid", name="enc_conv2_2")
+            filter_size=[ksize, ksize, 32, 32], activation="elu", name="enc_conv2_2")
         maxp2 = self.maxpool(input=conv2_2, ksize=2, strides=2, padding='SAME', name="enc_max_pool2")
         self.conv_shapes.append(conv2_2.shape)
 
-        print("Encode-3")
+        print("Encoder-3")
         conv3_1 = self.conv2d(input=maxp2, stride=1, padding='SAME', \
-            filter_size=[ksize, ksize, 32, 64], activation="sigmoid", name="enc_conv3_1")
+            filter_size=[ksize, ksize, 32, 64], activation="elu", name="enc_conv3_1")
         conv3_2 = self.conv2d(input=conv3_1, stride=1, padding='SAME', \
-            filter_size=[ksize, ksize, 64, 64], activation="sigmoid", name="enc_conv3_2")
+            filter_size=[ksize, ksize, 64, 64], activation="elu", name="enc_conv3_2")
         self.conv_shapes.append(conv3_2.shape)
 
-        print("Encode-Dense")
+        print("Encoder-Dense")
         self.fc_shapes.append(conv3_2.shape)
         [n, h, w, c] = self.fc_shapes[0]
         fulcon_in = tf.compat.v1.reshape(conv3_2, shape=[self.batch_size, h*w*c], name="enc_fulcon_in")
         fulcon1 = self.fully_connected(input=fulcon_in, num_inputs=int(h*w*c), \
-            num_outputs=512, activation="sigmoid", name="enc_fullcon1")
+            num_outputs=512, activation="elu", name="enc_fullcon1")
 
         z_params = self.fully_connected(input=fulcon1, num_inputs=int(fulcon1.shape[1]), \
-            num_outputs=self.z_dim*2, activation="None", name="enc_z")
-        # z_params = tf.compat.v1.clip_by_value(z_params, -3+(1e-12), 3-(1e-12))
-        z_mu = z_params[:, :self.z_dim]
-        z_sigma = z_params[:, self.z_dim:]
-
+            num_outputs=self.z_dim*2, activation="None", name="enc_z_sigma")
+        z_mu, z_sigma = self.split_z(z=z_params)
         z = self.sample_z(mu=z_mu, sigma=z_sigma) # reparameterization trick
 
         return z, z_mu, z_sigma
@@ -163,54 +171,59 @@ class CVAE(object):
         print("\nTransformer-Dense")
         [n, m] = input.shape
         fulcon1 = self.fully_connected(input=input, num_inputs=m, \
-            num_outputs=512, activation="sigmoid", name="tra_fullcon1")
+            num_outputs=512, activation="elu", name="tra_fullcon1")
 
-        z_params = self.fully_connected(input=fulcon1, num_inputs=512, \
-            num_outputs=self.z_dim*2, activation="None", name="tra_z")
-        # z_params = tf.compat.v1.clip_by_value(z_params, -3+(1e-12), 3-(1e-12))
-        z_mu = z_params[:, :self.z_dim]
-        z_sigma = z_params[:, self.z_dim:]
-
+        z_params = self.fully_connected(input=fulcon1, num_inputs=int(fulcon1.shape[1]), \
+            num_outputs=self.z_dim*2, activation="None", name="enc_z_sigma")
+        z_mu, z_sigma = self.split_z(z=z_params)
         z = self.sample_z(mu=z_mu, sigma=z_sigma) # reparameterization trick
 
         return z, z_mu, z_sigma
 
     def generator(self, input, ksize=3):
 
-        print("\nGenerate-Dense")
+        print("\nGenerator-Dense")
         [n, h, w, c] = self.fc_shapes[0]
         fulcon2 = self.fully_connected(input=input, num_inputs=int(self.z_dim), \
-            num_outputs=512, activation="sigmoid", name="gen_fullcon2")
+            num_outputs=512, activation="elu", name="gen_fullcon2")
         fulcon3 = self.fully_connected(input=fulcon2, num_inputs=int(fulcon2.shape[1]), \
-            num_outputs=int(h*w*c), activation="sigmoid", name="gen_fullcon3")
+            num_outputs=int(h*w*c), activation="elu", name="gen_fullcon3")
         fulcon_out = tf.compat.v1.reshape(fulcon3, shape=[self.batch_size, h, w, c], name="gen_fulcon_out")
 
-        print("Generate-1")
+        print("Generator-1")
         convt1_1 = self.conv2d(input=fulcon_out, stride=1, padding='SAME', \
-            filter_size=[ksize, ksize, 64, 64], activation="sigmoid", name="gen_conv1_1")
+            filter_size=[ksize, ksize, 64, 64], activation="elu", name="gen_convt1_1")
         convt1_2 = self.conv2d(input=convt1_1, stride=1, padding='SAME', \
-            filter_size=[ksize, ksize, 64, 64], activation="sigmoid", name="gen_conv1_2")
+            filter_size=[ksize, ksize, 64, 64], activation="elu", name="gen_convt1_2")
 
-        print("Generate-2")
+        print("Generator-2")
         [n, h, w, c] = self.conv_shapes[-2]
         convt2_1 = self.conv2d_transpose(input=convt1_2, stride=2, padding='SAME', \
             output_shape=[self.batch_size, h, w, c], filter_size=[ksize, ksize, 32, 64], \
-            dilations=[1, 1, 1, 1], activation="sigmoid", name="gen_conv2_1")
+            dilations=[1, 1, 1, 1], activation="elu", name="gen_convt2_1")
         convt2_2 = self.conv2d(input=convt2_1, stride=1, padding='SAME', \
-            filter_size=[ksize, ksize, 32, 32], activation="sigmoid", name="gen_conv2_2")
+            filter_size=[ksize, ksize, 32, 32], activation="elu", name="gen_convt2_2")
 
-        print("Generate-3")
+        print("Generator-3")
         [n, h, w, c] = self.conv_shapes[-3]
         convt3_1 = self.conv2d_transpose(input=convt2_2, stride=2, padding='SAME', \
             output_shape=[self.batch_size, h, w, c], filter_size=[ksize, ksize, 16, 32], \
-            dilations=[1, 1, 1, 1], activation="sigmoid", name="gen_conv3_1")
+            dilations=[1, 1, 1, 1], activation="elu", name="gen_convt3_1")
         convt3_2 = self.conv2d(input=convt3_1, stride=1, padding='SAME', \
-            filter_size=[ksize, ksize, 16, 16], activation="sigmoid", name="gen_conv3_2")
+            filter_size=[ksize, ksize, 16, 16], activation="elu", name="gen_convt3_2")
         convt3_3 = self.conv2d(input=convt3_2, stride=1, padding='SAME', \
-            filter_size=[ksize, ksize, 16, 1], activation="sigmoid", name="gen_conv3_3")
-        # convt3_3 = tf.compat.v1.clip_by_value(convt3_3, 1e-12, 1-(1e-12))
+            filter_size=[ksize, ksize, 16, 1], activation="sigmoid", name="gen_convt3_3")
 
         return convt3_3
+
+    def split_z(self, z):
+
+        z_mu = z[:, :self.z_dim]
+        z_mu = tf.compat.v1.clip_by_value(z_mu, -3+(1e-12), 3-(1e-12))
+        z_sigma = z[:, self.z_dim:]
+        z_sigma = tf.compat.v1.clip_by_value(z_sigma, 1e-12, 1-(1e-12))
+
+        return z_mu, z_sigma
 
     def sample_z(self, mu, sigma):
 
@@ -287,7 +300,7 @@ class CVAE(object):
             name='%s_conv' %(name),
         )
         out_bias = tf.math.add(out_conv, bias, name='%s_add' %(name))
-        out_bias = self.batch_normalization(input=out_bias)
+        # out_bias = self.batch_normalization(input=out_bias)
 
         print("Conv", input.shape, "->", out_bias.shape)
         return self.activation_fn(input=out_bias, activation=activation, name=name)
@@ -325,7 +338,7 @@ class CVAE(object):
             name='%s_conv_tr' %(name),
         )
         out_bias = tf.math.add(out_conv, bias, name='%s_add' %(name))
-        out_bias = self.batch_normalization(input=out_bias)
+        # out_bias = self.batch_normalization(input=out_bias)
 
         print("Conv-Tr", input.shape, "->", out_bias.shape)
         return self.activation_fn(input=out_bias, activation=activation, name=name)
@@ -351,7 +364,7 @@ class CVAE(object):
 
         out_mul = tf.compat.v1.matmul(input, weight, name='%s_mul' %(name))
         out_bias = tf.math.add(out_mul, bias, name='%s_add' %(name))
-        out_bias = self.batch_normalization(input=out_bias)
+        # out_bias = self.batch_normalization(input=out_bias)
 
         print("Full-Con", input.shape, "->", out_bias.shape)
         return self.activation_fn(input=out_bias, activation=activation, name=name)
