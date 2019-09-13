@@ -21,6 +21,11 @@ Implementation of 'Self-adversarial Variational Autoencoder with Gaussian Anomal
   <p>Restoration result by Self-AVAE.</p>
 </div>
 
+<div align="center">
+  <img src="./figures/test-box.png" width="400">
+  <p>Box plot with encoding loss of test procedure.</p>
+</div>
+
 ## Environment
 * Python 3.7.4  
 * Tensorflow 1.14.0  
