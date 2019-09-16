@@ -194,6 +194,7 @@ def test(sess, saver, neuralnet, dataset, batch_size):
 
     plt.hist(scores_normal, alpha=0.5, label='Normal')
     plt.hist(scores_abnormal, alpha=0.5, label='Abnormal')
+    plt.ylim(0, 1000)
     plt.legend(loc='upper right')
     plt.savefig("histogram-test.png")
     plt.close()
