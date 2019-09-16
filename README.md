@@ -1,7 +1,7 @@
-adVAE (Self-adversarial Variational Autoencoder)
+adVAE (Self-Adversarial Variational Autoencoder)
 =====
 
-Implementation of 'Self-adversarial Variational Autoencoder with Gaussian Anomaly Prior Distribution for Anomaly Detection' (adVAE) [<a href="https://github.com/YeongHyeon/CVAE-AnomalyDetection">Related repository</a>].
+Implementation of 'Self-Adversarial Variational Autoencoder with Gaussian Anomaly Prior Distribution for Anomaly Detection' (adVAE) [<a href="https://github.com/YeongHyeon/CVAE-AnomalyDetection">Related repository</a>].
 
 ## Architecture
 <div align="center">
