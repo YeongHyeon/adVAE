@@ -32,7 +32,7 @@ if __name__ == '__main__':
     parser.add_argument('--mx', type=int, default=1, help='Positive margin of MSE target.')
     parser.add_argument('--mz', type=int, default=1, help='Positive margin of KLD target.')
     parser.add_argument('--lr', type=int, default=1e-4, help='Learning rate for training')
-    parser.add_argument('--epoch', type=int, default=1000, help='Training epoch')
+    parser.add_argument('--epoch', type=int, default=100, help='Training epoch')
     parser.add_argument('--batch', type=int, default=32, help='Mini batch size')
 
     FLAGS, unparsed = parser.parse_known_args()

@@ -14,8 +14,8 @@ class Self_AVAE(object):
         self.batch_size = tf.placeholder(tf.int32, shape=[])
         # self.lambda_T = tf.placeholder(tf.float32, shape=[])
         # self.lambda_G = tf.placeholder(tf.float32, shape=[])
-        self.lambda_T = 1e-10
-        self.lambda_G = 1e+10
+        self.lambda_T = 1e-22
+        self.lambda_G = 1e+1
 
         self.weights, self.biasis = [], []
         self.w_names, self.b_names = [], []
@@ -48,8 +48,8 @@ class Self_AVAE(object):
             self.max_with_positive_margin(margin=self.mz, loss=self.kld_r) + \
             self.max_with_positive_margin(margin=self.mz, loss=self.kld_Tr)
 
-        self.loss_T_mean = tf.compat.v1.reduce_mean(self.loss_T)
-        self.loss_G_mean = tf.compat.v1.reduce_mean(self.loss_G)
+        self.loss_T_mean = tf.compat.v1.reduce_mean(self.lambda_T * self.loss_T)
+        self.loss_G_mean = tf.compat.v1.reduce_mean(self.lambda_G * self.loss_G)
         self.loss_E_mean = tf.compat.v1.reduce_mean(self.loss_E)
 
         self.loss1 = tf.compat.v1.reduce_mean((self.lambda_T * self.loss_T) + (self.lambda_G * self.loss_G))
@@ -84,6 +84,7 @@ class Self_AVAE(object):
         tf.compat.v1.summary.scalar('loss_tot', self.loss_tot)
         self.summaries = tf.compat.v1.summary.merge_all()
 
+    """For defining loss functions"""
     def mean_square_error(self, x1, x2):
 
         data_dim = len(x1.shape)
@@ -104,6 +105,7 @@ class Self_AVAE(object):
 
         return tf.compat.v1.math.maximum(x=tf.compat.v1.zeros_like(loss), y=(-loss + margin))
 
+    """For buliding neural networks"""
     def build_model(self, input, ksize=3):
 
         with tf.variable_scope('encoder') as scope_enc:
@@ -168,12 +170,8 @@ class Self_AVAE(object):
     def transformer(self, input):
 
         print("\nTransformer-Dense")
-        [n, m] = input.shape
-        fulcon1 = self.fully_connected(input=input, num_inputs=m, \
-            num_outputs=512, activation="elu", name="tra_fullcon1")
-
-        z_params = self.fully_connected(input=fulcon1, num_inputs=int(fulcon1.shape[1]), \
-            num_outputs=self.z_dim*2, activation="None", name="enc_z_sigma")
+        z_params = self.fully_connected(input=input, num_inputs=self.z_dim, \
+            num_outputs=self.z_dim*2, activation="elu", name="tra_fullcon1")
         z_mu, z_sigma = self.split_z(z=z_params)
         z = self.sample_z(mu=z_mu, sigma=z_sigma) # reparameterization trick
 
@@ -218,7 +216,7 @@ class Self_AVAE(object):
     def split_z(self, z):
 
         z_mu = z[:, :self.z_dim]
-        z_mu = tf.compat.v1.clip_by_value(z_mu, -3+(1e-12), 3-(1e-12))
+        # z_mu = tf.compat.v1.clip_by_value(z_mu, -3+(1e-12), 3-(1e-12))
         z_sigma = z[:, self.z_dim:]
         z_sigma = tf.compat.v1.clip_by_value(z_sigma, 1e-12, 1-(1e-12))
 

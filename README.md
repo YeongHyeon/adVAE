@@ -26,6 +26,11 @@ Implementation of 'Self-adversarial Variational Autoencoder with Gaussian Anomal
   <p>Box plot with encoding loss of test procedure.</p>
 </div>
 
+<div align="center">
+  <img src="./figures/test-latent_z.png" width="350"><img src="./figures/test-latent_z_T.png" width="350">
+  <p>Normal latent space, and transformed latent space (regared as abnormal).</p>
+</div>
+
 ## Environment
 * Python 3.7.4  
 * Tensorflow 1.14.0  
