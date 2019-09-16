@@ -248,10 +248,9 @@ def test(sess, saver, neuralnet, dataset, batch_size):
             savename=os.path.join("test-latent_z_T.png"))
     else:
         pca = PCA(n_components=2)
-        pca_features = pca.fit_transform(z_enc_tot)
-        latent_plot(latent=pca_features, y=y_te_tot, n=dataset.num_class, \
+        tot_vec = np.append(z_enc_tot, z_T_enc_tot, axis=0)
+        pca_features = pca.fit_transform(tot_vec)
+        latent_plot(latent=pca_features[:int(pca_features.shape[0]/2)], y=y_te_tot, n=dataset.num_class, \
             savename=os.path.join("test-latent_z.png"))
-        pca = PCA(n_components=2)
-        pca_features = pca.fit_transform(z_T_enc_tot)
-        latent_plot(latent=pca_features, y=y_te_tot, n=dataset.num_class, \
+        latent_plot(latent=pca_features[int(pca_features.shape[0]/2):], y=y_te_tot, n=dataset.num_class, \
             savename=os.path.join("test-latent_z_T.png"))

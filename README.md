@@ -22,8 +22,8 @@ Implementation of 'Self-adversarial Variational Autoencoder with Gaussian Anomal
 </div>
 
 <div align="center">
-  <img src="./figures/test-box.png" width="400">
-  <p>Box plot with encoding loss of test procedure.</p>
+  <img src="./figures/test-box.png" width="350"><img src="./figures/histogram-test.png" width="390">
+  <p>Box plot and histogram of restoration loss in test procedure.</p>
 </div>
 
 <div align="center">
