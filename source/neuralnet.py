@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-class Self_AVAE(object):
+class adVAE(object):
 
     def __init__(self, height, width, channel, z_dim, mx, mz, leaning_rate=1e-3):
 

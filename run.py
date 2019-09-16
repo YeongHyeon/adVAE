@@ -12,7 +12,7 @@ import source.tf_process as tfp
 def main():
 
     dataset = dman.Dataset(normalize=FLAGS.datnorm)
-    neuralnet = nn.Self_AVAE(height=dataset.height, width=dataset.width, channel=dataset.channel, \
+    neuralnet = nn.adVAE(height=dataset.height, width=dataset.width, channel=dataset.channel, \
         z_dim=FLAGS.z_dim, mx=FLAGS.mx, mz=FLAGS.mz, leaning_rate=FLAGS.lr)
 
     sess_config = tf.compat.v1.ConfigProto()
