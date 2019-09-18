@@ -264,27 +264,30 @@ class adVAE(object):
 
         return (input - mean) / (std + 1e-12)
 
+    def variable_maker(self, var_bank, name_bank, shape, name=""):
+
+        try:
+            var_idx = name_bank.index(name)
+        except:
+            variable = tf.compat.v1.get_variable(name=name, \
+                shape=shape, initializer=self.initializer())
+
+            var_bank.append(variable)
+            name_bank.append(name)
+        else:
+            variable = var_bank[var_idx]
+
+        return var_bank, name_bank, variable
+
     def conv2d(self, input, stride, padding, \
         filter_size=[3, 3, 16, 32], dilations=[1, 1, 1, 1], activation="relu", name=""):
 
         # strides=[N, H, W, C], [1, stride, stride, 1]
         # filter_size=[ksize, ksize, num_inputs, num_outputs]
-        try:
-            w_idx = self.w_names.index('%s_w' %(name))
-            b_idx = self.b_names.index('%s_b' %(name))
-        except:
-            weight = tf.compat.v1.get_variable(name='%s_w' %(name), \
-                shape=filter_size, initializer=self.initializer())
-            bias = tf.compat.v1.get_variable(name='%s_b' %(name), \
-                shape=[filter_size[-1]], initializer=self.initializer())
-
-            self.weights.append(weight)
-            self.biasis.append(bias)
-            self.w_names.append('%s_w' %(name))
-            self.b_names.append('%s_b' %(name))
-        else:
-            weight = self.weights[w_idx]
-            bias = self.biasis[b_idx]
+        self.weights, self.w_names, weight = self.variable_maker(var_bank=self.weights, name_bank=self.w_names, \
+            shape=filter_size, name='%s_w' %(name))
+        self.biasis, self.b_names, bias = self.variable_maker(var_bank=self.biasis, name_bank=self.b_names, \
+            shape=[filter_size[-1]], name='%s_b' %(name))
 
         out_conv = tf.compat.v1.nn.conv2d(
             input=input,
@@ -307,22 +310,10 @@ class adVAE(object):
 
         # strides=[N, H, W, C], [1, stride, stride, 1]
         # filter_size=[ksize, ksize, num_outputs, num_inputs]
-        try:
-            w_idx = self.w_names.index('%s_w' %(name))
-            b_idx = self.b_names.index('%s_b' %(name))
-        except:
-            weight = tf.compat.v1.get_variable(name='%s_w' %(name), \
-                shape=filter_size, initializer=self.initializer())
-            bias = tf.compat.v1.get_variable(name='%s_b' %(name), \
-                shape=[filter_size[-2]], initializer=self.initializer())
-
-            self.weights.append(weight)
-            self.biasis.append(bias)
-            self.w_names.append('%s_w' %(name))
-            self.b_names.append('%s_b' %(name))
-        else:
-            weight = self.weights[w_idx]
-            bias = self.biasis[b_idx]
+        self.weights, self.w_names, weight = self.variable_maker(var_bank=self.weights, name_bank=self.w_names, \
+            shape=filter_size, name='%s_w' %(name))
+        self.biasis, self.b_names, bias = self.variable_maker(var_bank=self.biasis, name_bank=self.b_names, \
+            shape=[filter_size[-2]], name='%s_b' %(name))
 
         out_conv = tf.compat.v1.nn.conv2d_transpose(
             value=input,
@@ -342,22 +333,10 @@ class adVAE(object):
 
     def fully_connected(self, input, num_inputs, num_outputs, activation="relu", name=""):
 
-        try:
-            w_idx = self.w_names.index('%s_w' %(name))
-            b_idx = self.b_names.index('%s_b' %(name))
-        except:
-            weight = tf.compat.v1.get_variable(name='%s_w' %(name), \
-                shape=[num_inputs, num_outputs], initializer=self.initializer())
-            bias = tf.compat.v1.get_variable(name='%s_b' %(name), \
-                shape=[num_outputs], initializer=self.initializer())
-
-            self.weights.append(weight)
-            self.biasis.append(bias)
-            self.w_names.append('%s_w' %(name))
-            self.b_names.append('%s_b' %(name))
-        else:
-            weight = self.weights[w_idx]
-            bias = self.biasis[b_idx]
+        self.weights, self.w_names, weight = self.variable_maker(var_bank=self.weights, name_bank=self.w_names, \
+            shape=[num_inputs, num_outputs], name='%s_w' %(name))
+        self.biasis, self.b_names, bias = self.variable_maker(var_bank=self.biasis, name_bank=self.b_names, \
+            shape=[num_outputs], name='%s_b' %(name))
 
         out_mul = tf.compat.v1.matmul(input, weight, name='%s_mul' %(name))
         out_bias = tf.math.add(out_mul, bias, name='%s_add' %(name))
