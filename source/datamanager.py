@@ -44,7 +44,12 @@ class Dataset(object):
 
     def split_dataset(self):
 
-        """Split original dataset to normal or abnormal. In this project 'class 1' is regarded as normal, and the others are regarded as abnormal. Shape of 'x_tot[yidx]' is (Height, Width). Before listing normal and abnormal, reshaping is conducted, from (Height, Width) to (1, Height, Width), for organizing mini-batch conveniently. In shape (1, Height, Width), 1 means temporary batch size. After listing normal and abnormal, the shape of x_normal is (N, Height, Width). In this case, the normal and abnormal will be containing 2000 and 1000 samples respectively."""
+        """Split original dataset to normal or abnormal. In this project 'class 1' is regarded as normal,
+        and the others are regarded as abnormal. Shape of 'x_tot[yidx]' is (Height, Width). Before
+        listing normal and abnormal, reshaping is conducted, from (Height, Width) to (1, Height, Width),
+        for organizing mini-batch conveniently. In shape (1, Height, Width), 1 means temporary batch
+        size. After listing normal and abnormal, the shape of x_normal is (N, Height, Width). In this
+        case, the normal and abnormal will be containing 2000 and 1000 samples respectively."""
 
         x_tot = np.append(self.x_tr, self.x_te, axis=0)
         y_tot = np.append(self.y_tr, self.y_te, axis=0)
@@ -87,7 +92,10 @@ class Dataset(object):
 
     def next_train(self, batch_size=1, fix=False):
 
-        """Basically, the shape of self.x_tr is (1000, Height, Width). First, extract mini-batch from the total batch using two index 'start' and 'end'. The shape of mini-batch is (N, Height, Width) initially, so reshaping is needed to feeding 2D-convolutional layer. The shape of final mini-batch x is (N, Height, Width, 1) in this (MNIST dataset) case."""
+        """Basically, the shape of self.x_tr is (1000, Height, Width). First, extract mini-batch from the
+        total batch using two index 'start' and 'end'. The shape of mini-batch is (N, Height, Width)
+        initially, so reshaping is needed to feeding 2D-convolutional layer. The shape of final mini-
+        batch x is (N, Height, Width, 1) in this (MNIST dataset) case."""
 
         start, end = self.idx_tr, self.idx_tr+batch_size
         x_tr, y_tr = self.x_tr[start:end], self.y_tr[start:end]
