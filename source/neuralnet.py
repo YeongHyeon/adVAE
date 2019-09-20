@@ -4,7 +4,16 @@ class adVAE(object):
 
     def __init__(self, height, width, channel, z_dim, mx, mz, leaning_rate=1e-3):
 
+        """The class adVAE conducts constructing adVAE with N steps as below.
+        Step 1. Constructing neural network.
+        Step 2. Defincing the loss functions.
+        Step 3. Splitting the parameters for two training phase.
+        Step 4. assign splitted parameters for two optimizer respectively.
+        Extra Step. TensorBoard."""
+
         print("\nInitializing Neural Network...")
+
+        """ -------------------- Step 1 -------------------- """
         self.height, self.width, self.channel = height, width, channel
         self.k_size, self.z_dim = 3, z_dim
         self.mx, self.mz, = mx, mz
@@ -12,10 +21,7 @@ class adVAE(object):
 
         self.x = tf.compat.v1.placeholder(tf.float32, [None, self.height, self.width, self.channel])
         self.batch_size = tf.placeholder(tf.int32, shape=[])
-        # self.lambda_T = tf.placeholder(tf.float32, shape=[])
-        # self.lambda_G = tf.placeholder(tf.float32, shape=[])
-        self.lambda_T = 1e-22
-        self.lambda_G = 1e+1
+        self.lambda_T, self.lambda_G = 1e-22, 1e+1
 
         self.weights, self.biasis = [], []
         self.w_names, self.b_names = [], []
@@ -25,14 +31,15 @@ class adVAE(object):
         self.z_pack, self.z_T_pack, self.x_r, self.x_Tr, self.z_r_pack, self.z_Tr_pack = \
             self.build_model(input=self.x, ksize=self.k_size)
 
-        """Loss of Transformer
-        z_pack = [0:z, 1:z_mu, 2:z_sigma]"""
+        """ -------------------- Step 2 -------------------- """
+        # Loss of Transformer (T)
+        # z_pack is constructed as [0:z, 1:z_mu, 2:z_sigma]
         self.T_term1 = tf.math.log(self.z_T_pack[2] + 1e-12) - tf.math.log(self.z_pack[2] + 1e-12)
         self.T_term2 = (tf.square(self.z_pack[2]) + tf.square(self.z_T_pack[1] - self.z_pack[1])) / (2 * tf.square(self.z_T_pack[2]))
         self.T_term3 = - 0.5
         self.loss_T = tf.compat.v1.reduce_sum(self.T_term1 + self.T_term2 + self.T_term3, axis=(1))
 
-        """Loss of Generator"""
+        # Loss of Generator (G)
         self.mse_r = self.mean_square_error(x1=self.x, x2=self.x_r)
         self.kld_r = self.kl_divergence(mu=self.z_r_pack[1], sigma=self.z_r_pack[2])
         self.mse_Tr = self.mean_square_error(x1=self.x_r, x2=self.x_Tr)
@@ -42,7 +49,7 @@ class adVAE(object):
             self.max_with_positive_margin(margin=self.mz, loss=self.kld_Tr)
         self.loss_G = self.loss_G_z + self.loss_G_zT
 
-        """Loss of Encoder"""
+        # Loss of Encoder (E)
         self.kld = self.kl_divergence(mu=self.z_pack[1], sigma=self.z_pack[2])
         self.loss_E = self.kld + self.mse_r + \
             self.max_with_positive_margin(margin=self.mz, loss=self.kld_r) + \
@@ -54,8 +61,9 @@ class adVAE(object):
 
         self.loss1 = tf.compat.v1.reduce_mean((self.lambda_T * self.loss_T) + (self.lambda_G * self.loss_G))
         self.loss2 = self.loss_E_mean
-        self.loss_tot = self.loss1 + self.loss2
+        self.loss_tot = self.loss1 + self.loss2 # meaningless but use for confirming loss convergence.
 
+        """ -------------------- Step 3 -------------------- """
         self.vars1, self.vars2 = [], []
         for widx, wname in enumerate(self.w_names):
             if("enc_" in wname):
@@ -71,21 +79,26 @@ class adVAE(object):
         print("\nVariables (E)")
         for var in self.vars2: print(var)
 
-        """Two optimizers for training T, G, and E
-        default: beta1=0.9, beta2=0.999"""
+        """ -------------------- Step 4 -------------------- """
         self.optimizer1 = tf.compat.v1.train.AdamOptimizer( \
             self.leaning_rate, beta1=0.9, beta2=0.999).minimize(self.loss1, var_list=self.vars1, name='Adam_T_G')
         self.optimizer2 = tf.compat.v1.train.AdamOptimizer( \
             self.leaning_rate, beta1=0.9, beta2=0.999).minimize(self.loss2, var_list=self.vars2, name='Adam_E')
 
+        """ -------------------- Extra Step -------------------- """
         tf.compat.v1.summary.scalar('loss_T', self.loss_T_mean)
         tf.compat.v1.summary.scalar('loss_G', self.loss_G_mean)
         tf.compat.v1.summary.scalar('loss_E', self.loss_E_mean)
         tf.compat.v1.summary.scalar('loss_tot', self.loss_tot)
         self.summaries = tf.compat.v1.summary.merge_all()
 
-    """For defining loss functions"""
+    """ ----------------------------------------------------------------------------
+    The functions for measuring losses are defined below this sentence.
+    ---------------------------------------------------------------------------- """
+
     def mean_square_error(self, x1, x2):
+
+        """Measure MSE between x1, x2."""
 
         data_dim = len(x1.shape)
         if(data_dim == 4):
@@ -99,117 +112,132 @@ class adVAE(object):
 
     def kl_divergence(self, mu, sigma):
 
+        """Measure KL-divergence between N(mu, sigma^2) and N(0, 1)."""
+
         return 0.5 * tf.compat.v1.reduce_sum(tf.square(mu) + tf.square(sigma) - tf.math.log(tf.square(sigma) + 1e-12) - 1, axis=(1))
 
     def max_with_positive_margin(self, margin, loss):
 
+        """Measure marginal loss."""
+
         return tf.compat.v1.math.maximum(x=tf.compat.v1.zeros_like(loss), y=(-loss + margin))
 
-    """For buliding neural networks"""
+    """ ----------------------------------------------------------------------------
+    The functions for building neural network are defined below this sentence.
+    ---------------------------------------------------------------------------- """
+
     def build_model(self, input, ksize=3):
 
+        """Build adVAE structure using three functions 'encoder', 'transformer', and 'generator'. The function 'generator' is same as decoder in VAE structure."""
+
         with tf.variable_scope('encoder') as scope_enc:
-            z, z_mu, z_sigma = self.encoder(input=input, ksize=ksize)
+            z, z_mu, z_sigma = self.encoder(input=input, ksize=ksize, name="enc")
             z_pack = [z, z_mu, z_sigma]
 
         with tf.variable_scope('transformer') as scope_tra:
-            z_T, z_mu_T, z_sigma_T = self.transformer(input=z)
+            z_T, z_mu_T, z_sigma_T = self.transformer(input=z, name="tra")
             z_T_pack = [z_T, z_mu_T, z_sigma_T]
 
         with tf.variable_scope('generator') as scope_gen:
-            x_r = self.generator(input=z, ksize=ksize)
-            x_Tr = self.generator(input=z_T, ksize=ksize)
+            x_r = self.generator(input=z, ksize=ksize, name="gen")
+            x_Tr = self.generator(input=z_T, ksize=ksize, name="gen")
 
         with tf.variable_scope(scope_enc, reuse=True):
-            z_r, z_mu_r, z_sigma_r = self.encoder(input=x_r, ksize=ksize)
+            z_r, z_mu_r, z_sigma_r = self.encoder(input=x_r, ksize=ksize, name="enc")
             z_r_pack = [z_r, z_mu_r, z_sigma_r]
-            z_Tr, z_mu_Tr, z_sigma_Tr = self.encoder(input=x_Tr, ksize=ksize)
+            z_Tr, z_mu_Tr, z_sigma_Tr = self.encoder(input=x_Tr, ksize=ksize, name="enc")
             z_Tr_pack = [z_Tr, z_mu_Tr, z_sigma_Tr]
 
         return z_pack, z_T_pack, x_r, x_Tr, z_r_pack, z_Tr_pack
 
-    def encoder(self, input, ksize=3):
+    def encoder(self, input, ksize=3, name="enc"):
+
+        """The function for generating encoder. Basically the purpose of this fuction is encoding the input data x to latent vector z. Each parameter for each layer is generated with its own name. However, when who try to generate the parameter using existed name, the existing parameter will be used in that situation. The parameter sharing is conducted via above property."""
 
         print("\nEncoder-1")
         conv1_1 = self.conv2d(input=input, stride=1, padding='SAME', \
-            filter_size=[ksize, ksize, 1, 16], activation="elu", name="enc_conv1_1")
+            filter_size=[ksize, ksize, 1, 16], activation="elu", name="%s_conv1_1" %(name))
         conv1_2 = self.conv2d(input=conv1_1, stride=1, padding='SAME', \
-            filter_size=[ksize, ksize, 16, 16], activation="elu", name="enc_conv1_2")
-        maxp1 = self.maxpool(input=conv1_2, ksize=2, strides=2, padding='SAME', name="enc_max_pool1")
+            filter_size=[ksize, ksize, 16, 16], activation="elu", name="%s_conv1_2" %(name))
+        maxp1 = self.maxpool(input=conv1_2, ksize=2, strides=2, padding='SAME', name="%s_max_pool1" %(name))
         self.conv_shapes.append(conv1_2.shape)
 
         print("Encoder-2")
         conv2_1 = self.conv2d(input=maxp1, stride=1, padding='SAME', \
-            filter_size=[ksize, ksize, 16, 32], activation="elu", name="enc_conv2_1")
+            filter_size=[ksize, ksize, 16, 32], activation="elu", name="%s_conv2_1" %(name))
         conv2_2 = self.conv2d(input=conv2_1, stride=1, padding='SAME', \
-            filter_size=[ksize, ksize, 32, 32], activation="elu", name="enc_conv2_2")
-        maxp2 = self.maxpool(input=conv2_2, ksize=2, strides=2, padding='SAME', name="enc_max_pool2")
+            filter_size=[ksize, ksize, 32, 32], activation="elu", name="%s_conv2_2" %(name))
+        maxp2 = self.maxpool(input=conv2_2, ksize=2, strides=2, padding='SAME', name="%s_max_pool2" %(name))
         self.conv_shapes.append(conv2_2.shape)
 
         print("Encoder-3")
         conv3_1 = self.conv2d(input=maxp2, stride=1, padding='SAME', \
-            filter_size=[ksize, ksize, 32, 64], activation="elu", name="enc_conv3_1")
+            filter_size=[ksize, ksize, 32, 64], activation="elu", name="%s_conv3_1" %(name))
         conv3_2 = self.conv2d(input=conv3_1, stride=1, padding='SAME', \
-            filter_size=[ksize, ksize, 64, 64], activation="elu", name="enc_conv3_2")
+            filter_size=[ksize, ksize, 64, 64], activation="elu", name="%s_conv3_2" %(name))
         self.conv_shapes.append(conv3_2.shape)
 
         print("Encoder-Dense")
         self.fc_shapes.append(conv3_2.shape)
         [n, h, w, c] = self.fc_shapes[0]
-        fulcon_in = tf.compat.v1.reshape(conv3_2, shape=[self.batch_size, h*w*c], name="enc_fulcon_in")
+        fulcon_in = tf.compat.v1.reshape(conv3_2, shape=[self.batch_size, h*w*c], name="%s_fulcon_in" %(name))
         fulcon1 = self.fully_connected(input=fulcon_in, num_inputs=int(h*w*c), \
-            num_outputs=512, activation="elu", name="enc_fullcon1")
+            num_outputs=512, activation="elu", name="%s_fullcon1" %(name))
 
         z_params = self.fully_connected(input=fulcon1, num_inputs=int(fulcon1.shape[1]), \
-            num_outputs=self.z_dim*2, activation="None", name="enc_z_sigma")
+            num_outputs=self.z_dim*2, activation="None", name="%s_z_param" %(name))
         z_mu, z_sigma = self.split_z(z=z_params)
         z = self.sample_z(mu=z_mu, sigma=z_sigma) # reparameterization trick
 
         return z, z_mu, z_sigma
 
-    def transformer(self, input):
+    def transformer(self, input, name="tra"):
+
+        """This function has same context as function 'encoder'. But, the purpose of this function is transforming normal latent vector to unkown anomalous latent vector."""
 
         print("\nTransformer-Dense")
         z_params = self.fully_connected(input=input, num_inputs=self.z_dim, \
-            num_outputs=self.z_dim*2, activation="elu", name="tra_fullcon1")
+            num_outputs=self.z_dim*2, activation="elu", name="%s_fullcon1" %(name))
         z_mu, z_sigma = self.split_z(z=z_params)
         z = self.sample_z(mu=z_mu, sigma=z_sigma) # reparameterization trick
 
         return z, z_mu, z_sigma
 
-    def generator(self, input, ksize=3):
+    def generator(self, input, ksize=3, name="dec"):
+
+        """This function has same context as function 'encoder'. But, the purpose of this function is restoring the input x from latent vector z."""
 
         print("\nGenerator-Dense")
         [n, h, w, c] = self.fc_shapes[0]
         fulcon2 = self.fully_connected(input=input, num_inputs=int(self.z_dim), \
-            num_outputs=512, activation="elu", name="gen_fullcon2")
+            num_outputs=512, activation="elu", name="%s_fullcon2" %(name))
         fulcon3 = self.fully_connected(input=fulcon2, num_inputs=int(fulcon2.shape[1]), \
-            num_outputs=int(h*w*c), activation="elu", name="gen_fullcon3")
-        fulcon_out = tf.compat.v1.reshape(fulcon3, shape=[self.batch_size, h, w, c], name="gen_fulcon_out")
+            num_outputs=int(h*w*c), activation="elu", name="%s_fullcon3" %(name))
+        fulcon_out = tf.compat.v1.reshape(fulcon3, shape=[self.batch_size, h, w, c], name="%s_fulcon_out" %(name))
 
         print("Generator-1")
         convt1_1 = self.conv2d(input=fulcon_out, stride=1, padding='SAME', \
-            filter_size=[ksize, ksize, 64, 64], activation="elu", name="gen_convt1_1")
+            filter_size=[ksize, ksize, 64, 64], activation="elu", name="%s_convt1_1" %(name))
         convt1_2 = self.conv2d(input=convt1_1, stride=1, padding='SAME', \
-            filter_size=[ksize, ksize, 64, 64], activation="elu", name="gen_convt1_2")
+            filter_size=[ksize, ksize, 64, 64], activation="elu", name="%s_convt1_2" %(name))
 
         print("Generator-2")
         [n, h, w, c] = self.conv_shapes[-2]
         convt2_1 = self.conv2d_transpose(input=convt1_2, stride=2, padding='SAME', \
             output_shape=[self.batch_size, h, w, c], filter_size=[ksize, ksize, 32, 64], \
-            dilations=[1, 1, 1, 1], activation="elu", name="gen_convt2_1")
+            dilations=[1, 1, 1, 1], activation="elu", name="%s_convt2_1" %(name))
         convt2_2 = self.conv2d(input=convt2_1, stride=1, padding='SAME', \
-            filter_size=[ksize, ksize, 32, 32], activation="elu", name="gen_convt2_2")
+            filter_size=[ksize, ksize, 32, 32], activation="elu", name="%s_convt2_2" %(name))
 
         print("Generator-3")
         [n, h, w, c] = self.conv_shapes[-3]
         convt3_1 = self.conv2d_transpose(input=convt2_2, stride=2, padding='SAME', \
             output_shape=[self.batch_size, h, w, c], filter_size=[ksize, ksize, 16, 32], \
-            dilations=[1, 1, 1, 1], activation="elu", name="gen_convt3_1")
+            dilations=[1, 1, 1, 1], activation="elu", name="%s_convt3_1" %(name))
         convt3_2 = self.conv2d(input=convt3_1, stride=1, padding='SAME', \
-            filter_size=[ksize, ksize, 16, 16], activation="elu", name="gen_convt3_2")
+            filter_size=[ksize, ksize, 16, 16], activation="elu", name="%s_convt3_2" %(name))
         convt3_3 = self.conv2d(input=convt3_2, stride=1, padding='SAME', \
-            filter_size=[ksize, ksize, 16, 1], activation="sigmoid", name="gen_convt3_3")
+            filter_size=[ksize, ksize, 16, 1], activation="sigmoid", name="%s_convt3_3" %(name))
 
         return convt3_3
 
@@ -229,6 +257,10 @@ class adVAE(object):
         sample = mu + (sigma * epsilon)
 
         return sample
+
+    """ ----------------------------------------------------------------------------
+    The functions for constructing layers are defined below this sentence.
+    ---------------------------------------------------------------------------- """
 
     def initializer(self):
         return tf.compat.v1.initializers.variance_scaling(distribution="untruncated_normal", dtype=tf.dtypes.float32)
@@ -257,14 +289,9 @@ class adVAE(object):
 
         return out
 
-    def batch_normalization(self, input):
-
-        mean = tf.compat.v1.reduce_mean(input)
-        std = tf.compat.v1.math.reduce_std(input)
-
-        return (input - mean) / (std + 1e-12)
-
     def variable_maker(self, var_bank, name_bank, shape, name=""):
+
+        """The function for construct the variable bank. All the variables (parameters) has its own name. Thus, if who try to make variable with extisted variable name, this function will return existing variable without generating new variable. This function is useful for parameter sharing."""
 
         try:
             var_idx = name_bank.index(name)
@@ -282,8 +309,8 @@ class adVAE(object):
     def conv2d(self, input, stride, padding, \
         filter_size=[3, 3, 16, 32], dilations=[1, 1, 1, 1], activation="relu", name=""):
 
-        # strides=[N, H, W, C], [1, stride, stride, 1]
-        # filter_size=[ksize, ksize, num_inputs, num_outputs]
+        """This function is customized 2D-convolution. Parameter sharing or someting else can be adjusted in this function. The parameter W(weight) and b(bias) is generated by function 'variable_maker' firstly. Then, the convolutional calculation with W and adding b are conducted."""
+
         self.weights, self.w_names, weight = self.variable_maker(var_bank=self.weights, name_bank=self.w_names, \
             shape=filter_size, name='%s_w' %(name))
         self.biasis, self.b_names, bias = self.variable_maker(var_bank=self.biasis, name_bank=self.b_names, \
@@ -300,7 +327,6 @@ class adVAE(object):
             name='%s_conv' %(name),
         )
         out_bias = tf.math.add(out_conv, bias, name='%s_add' %(name))
-        # out_bias = self.batch_normalization(input=out_bias)
 
         print("Conv", input.shape, "->", out_bias.shape)
         return self.activation_fn(input=out_bias, activation=activation, name=name)
@@ -308,8 +334,8 @@ class adVAE(object):
     def conv2d_transpose(self, input, stride, padding, output_shape, \
         filter_size=[3, 3, 16, 32], dilations=[1, 1, 1, 1], activation="relu", name=""):
 
-        # strides=[N, H, W, C], [1, stride, stride, 1]
-        # filter_size=[ksize, ksize, num_outputs, num_inputs]
+        """This function has same context as function 'conv2d'."""
+
         self.weights, self.w_names, weight = self.variable_maker(var_bank=self.weights, name_bank=self.w_names, \
             shape=filter_size, name='%s_w' %(name))
         self.biasis, self.b_names, bias = self.variable_maker(var_bank=self.biasis, name_bank=self.b_names, \
@@ -326,12 +352,13 @@ class adVAE(object):
             name='%s_conv_tr' %(name),
         )
         out_bias = tf.math.add(out_conv, bias, name='%s_add' %(name))
-        # out_bias = self.batch_normalization(input=out_bias)
 
         print("Conv-Tr", input.shape, "->", out_bias.shape)
         return self.activation_fn(input=out_bias, activation=activation, name=name)
 
     def fully_connected(self, input, num_inputs, num_outputs, activation="relu", name=""):
+
+        """This function has same context as function 'conv2d'. The only difference is that 'conv2d' uses convolutional calculation and this function uses inner-product calculation."""
 
         self.weights, self.w_names, weight = self.variable_maker(var_bank=self.weights, name_bank=self.w_names, \
             shape=[num_inputs, num_outputs], name='%s_w' %(name))
@@ -340,7 +367,6 @@ class adVAE(object):
 
         out_mul = tf.compat.v1.matmul(input, weight, name='%s_mul' %(name))
         out_bias = tf.math.add(out_mul, bias, name='%s_add' %(name))
-        # out_bias = self.batch_normalization(input=out_bias)
 
         print("Full-Con", input.shape, "->", out_bias.shape)
         return self.activation_fn(input=out_bias, activation=activation, name=name)

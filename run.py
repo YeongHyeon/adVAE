@@ -11,6 +11,7 @@ import source.tf_process as tfp
 
 def main():
 
+    """Initializing dataset and neural network"""
     dataset = dman.Dataset(normalize=FLAGS.datnorm)
     neuralnet = nn.adVAE(height=dataset.height, width=dataset.width, channel=dataset.channel, \
         z_dim=FLAGS.z_dim, mx=FLAGS.mx, mz=FLAGS.mz, leaning_rate=FLAGS.lr)
@@ -21,6 +22,7 @@ def main():
     sess.run(tf.compat.v1.global_variables_initializer())
     saver = tf.compat.v1.train.Saver()
 
+    """process of training and test with neural network"""
     tfp.training(sess=sess, neuralnet=neuralnet, saver=saver, dataset=dataset, epochs=FLAGS.epoch, batch_size=FLAGS.batch, normalize=True)
     tfp.test(sess=sess, neuralnet=neuralnet, saver=saver, dataset=dataset, batch_size=FLAGS.batch)
 

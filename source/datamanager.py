@@ -44,6 +44,8 @@ class Dataset(object):
 
     def split_dataset(self):
 
+        """Split original dataset to normal or abnormal. In this project 'class 1' is regarded as normal, and the others are regarded as abnormal. Shape of 'x_tot[yidx]' is (Height, Width). Before listing normal and abnormal, reshaping is conducted, from (Height, Width) to (1, Height, Width), for organizing mini-batch conveniently. In shape (1, Height, Width), 1 means temporary batch size. After listing normal and abnormal, the shape of x_normal is (N, Height, Width). In this case, the normal and abnormal will be containing 2000 and 1000 samples respectively."""
+
         x_tot = np.append(self.x_tr, self.x_te, axis=0)
         y_tot = np.append(self.y_tr, self.y_te, axis=0)
 
@@ -67,13 +69,15 @@ class Dataset(object):
                     x_abnormal = x_tmp
                     y_abnormal = y_tmp
                 else:
-                    if(x_abnormal.shape[0] < 1000):
+                    if(x_abnormal.shape[0] < 1000): # collecting only 1000 abnormal samples
                         x_abnormal = np.append(x_abnormal, x_tmp, axis=0)
                         y_abnormal = np.append(y_abnormal, y_tmp, axis=0)
 
-            if(not(x_normal is None) and not(x_abnormal is None)):
+            if(not(x_normal is None) and not(x_abnormal is None)): # collecting only 2000 normal samples
                 if((x_normal.shape[0] >= 2000) and x_abnormal.shape[0] >= 1000): break
 
+        # Split normal samples to training and test set.
+        # All abnormal samples are merged into test set.
         self.x_tr, self.y_tr = x_normal[:1000], y_normal[:1000]
         self.x_te, self.y_te = x_normal[1000:], y_normal[1000:]
         self.x_te = np.append(self.x_te, x_abnormal, axis=0)
@@ -83,33 +87,37 @@ class Dataset(object):
 
     def next_train(self, batch_size=1, fix=False):
 
+        """Basically, the shape of self.x_tr is (1000, Height, Width). First, extract mini-batch from the total batch using two index 'start' and 'end'. The shape of mini-batch is (N, Height, Width) initially, so reshaping is needed to feeding 2D-convolutional layer. The shape of final mini-batch x is (N, Height, Width, 1) in this (MNIST dataset) case."""
+
         start, end = self.idx_tr, self.idx_tr+batch_size
         x_tr, y_tr = self.x_tr[start:end], self.y_tr[start:end]
         x_tr = np.expand_dims(x_tr, axis=3)
-        x_tr = (x_tr + 1e-12) / self.max_val
 
         terminator = False
         if(end >= self.num_tr):
             terminator = True
             self.idx_tr = 0
+            # Shuffling dataset after exploring all the data of batch.
             self.x_tr, self.y_tr = shuffle(self.x_tr, self.y_tr)
         else: self.idx_tr = end
 
-        if(fix): self.idx_tr = start
+        if(fix): self.idx_tr = start # For fixing the index for extract mini-batch.
 
         if(x_tr.shape[0] != batch_size):
             x_tr, y_tr = self.x_tr[-1-batch_size:-1], self.y_tr[-1-batch_size:-1]
             x_tr = np.expand_dims(x_tr, axis=3)
             x_tr = (x_tr + 1e-12) / self.max_val
 
+        if(self.normalize): x_tr = (x_tr - x_tr.min()) / (x_tr.max() - x_tr.min())
         return x_tr, y_tr, terminator
 
     def next_test(self, batch_size=1):
 
+        """This function has same context as function 'next_train'."""
+
         start, end = self.idx_te, self.idx_te+batch_size
         x_te, y_te = self.x_te[start:end], self.y_te[start:end]
         x_te = np.expand_dims(x_te, axis=3)
-        x_te = (x_te + 1e-12) / self.max_val
 
         terminator = False
         if(end >= self.num_te):
@@ -117,4 +125,5 @@ class Dataset(object):
             self.idx_te = 0
         else: self.idx_te = end
 
+        if(self.normalize): x_te = (x_te - x_te.min()) / (x_te.max() - x_te.min())
         return x_te, y_te, terminator
