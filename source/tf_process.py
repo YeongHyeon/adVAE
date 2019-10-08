@@ -87,6 +87,20 @@ def latent_plot(latent, y, n, savename=""):
     plt.savefig(savename)
     plt.close()
 
+def histogram(contents, savename=""):
+
+    n1, _, _ = plt.hist(contents[0], bins=100, alpha=0.5, label='Normal')
+    n2, _, _ = plt.hist(contents[1], bins=100, alpha=0.5, label='Abnormal')
+    h_inter = np.sum(np.minimum(n1, n2)) / np.sum(n1)
+    plt.xlabel("MSE")
+    plt.ylabel("Number of Data")
+    xmax = max(contents[0].max(), contents[1].max())
+    plt.xlim(0, xmax)
+    plt.text(x=xmax*0.01, y=max(n1.max(), n2.max()), s="Histogram Intersection: %.3f" %(h_inter))
+    plt.legend(loc='upper right')
+    plt.savefig(savename)
+    plt.close()
+
 def training(sess, saver, neuralnet, dataset, epochs, batch_size, normalize=True):
 
     print("\nTraining to %d epochs (%d of minibatch size)" %(epochs, batch_size))
@@ -192,11 +206,7 @@ def test(sess, saver, neuralnet, dataset, batch_size):
     outbound = normal_avg + (normal_std * 3)
     print("Outlier boundary of normal data: %.5f" %(outbound))
 
-    plt.hist(scores_normal, alpha=0.5, label='Normal')
-    plt.hist(scores_abnormal, alpha=0.5, label='Abnormal')
-    plt.legend(loc='upper right')
-    plt.savefig("histogram-test.png")
-    plt.close()
+    histogram(contents=[scores_normal, scores_abnormal], savename="histogram-test.png")
 
     fcsv = open("test-summary.csv", "w")
     fcsv.write("class, loss, outlier\n")
